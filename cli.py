@@ -1,6 +1,7 @@
+import shlex
 import argparse
 
-from auto_runner import AutoLogger, AutoRunner
+from core import Runner, Logger, Command, FileWatcher
 
 def main():
 
@@ -14,24 +15,41 @@ def main():
                                      description=descriptor,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    command_group = parser.add_argument_group(title="Command", description="specifies command/file the auto-runner will execute whenever it detects a file is modified")
+    command_group = parser.add_argument_group(title="Command", 
+                                              description="specifies command/file the auto-runner will execute whenever it detects a file is modified")
     command_group = command_group.add_mutually_exclusive_group(required=True)
-    command_group.add_argument("-c", "--command", help="command to run automatically")
-    command_group.add_argument("-C", "--command-file", help="executable file to run automatically (auto-runner will watch this file for changes)")
+    command_group.add_argument("-c", "--command", 
+                               help="command to run automatically")
+    command_group.add_argument("-C", "--command-file", 
+                               help="executable file to run automatically (auto-runner will watch this file for changes)")
 
-    watch_group = parser.add_argument_group(title="Watch", description="specifies the set of files that the auto-runner will watch for changes.")
-    watch_group = watch_group.add_mutually_exclusive_group(required=True)
-    watch_group.add_argument("-w", "--watch", nargs='*', help="files to watch for changes (space seperated)")
-    watch_group.add_argument("-W", "--watch-file", help="text file containing files to watch (auto-runner will watch this file for changes)")
+    watch_group = parser.add_argument_group(title="Watch", 
+                                            description="specifies the set of files that the auto-runner will watch for changes.")
+    watch_group = watch_group.add_mutually_exclusive_group()
+    watch_group.add_argument("-w", "--watch", 
+                             nargs='*', 
+                             help="files to watch for changes (space seperated)")
+    watch_group.add_argument("-W", "--watch-file", 
+                             help="text file containing files to watch (auto-runner will watch this file for changes)")
 
-    logging_group = parser.add_argument_group(title="Logging", description="specifies logging behavior")
-    logging_group.add_argument("--dir", help="auto-runner will write the outputs of commands to this directory")
-    logging_group.add_argument("--max-backups", help="auto-runner will keep MAX_BACKUPS number of logs and delete old logs")
+    logging_group = parser.add_argument_group(title="Logging", 
+                                              description="specifies logging behavior")
+    logging_group.add_argument("--combine-stderr", 
+                               choices=["true", "false"], 
+                               default="true", 
+                               help="if true, auto-runner will redirect both stdout and stderr of the command to the same log file")
+    logging_group.add_argument("--file-name", 
+                               default="auto-runner.log", 
+                               help="auto-runner will write the outputs of commands to this file")
+    logging_group.add_argument("--max-backups", 
+                               default=10, 
+                               type=int,
+                               help="auto-runner will keep MAX_BACKUPS number of old logs and delete older logs")
     args = parser.parse_args()
 
     patterns_watched = []
     if args.command:
-        executable = args.command.split()
+        executable = shlex.split(args.command)
     else:
         # todo user validation: file exists, is executable
         executable = [args.command_file]
@@ -46,11 +64,21 @@ def main():
             lines = watch_file.readlines()
             patterns_watched += lines
 
-    logger = AutoLogger(logs_dir=args.dir,
-                        max_backups=args.max_backups)
-    runner = AutoRunner(executable=executable,
-                        patterns_watched=patterns_watched,
-                        logger=logger)
+    combine_stderr = True if args.combine_stderr == "true" else False
+
+
+    if len(patterns_watched) == 0:
+        print("auto-runner not watching any files, exiting")
+        exit(1)
+
+    command = Command(command=executable)
+    file_watcher = FileWatcher(patterns=patterns_watched)
+    logger = Logger(file_name=args.file_name,
+                    max_backups=args.max_backups,
+                    combine_stderr=combine_stderr)
+    runner = Runner(command=command,
+                    file_watcher=file_watcher,
+                    logger=logger)
     try:
         runner.start()
     except KeyboardInterrupt:
