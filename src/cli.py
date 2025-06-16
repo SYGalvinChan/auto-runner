@@ -1,3 +1,4 @@
+import os
 import shlex
 import argparse
 
@@ -38,9 +39,9 @@ def main():
                                choices=["true", "false"], 
                                default="true", 
                                help="if true, auto-runner will redirect both stdout and stderr of the command to the same log file")
-    logging_group.add_argument("--file-name", 
+    logging_group.add_argument("--log-file", 
                                default="auto-runner.log", 
-                               help="auto-runner will write the outputs of commands to this file")
+                               help="auto-runner will log the outputs of commands to this file")
     logging_group.add_argument("--max-backups", 
                                default=10, 
                                type=int,
@@ -52,6 +53,14 @@ def main():
         executable = shlex.split(args.command)
     else:
         # todo user validation: file exists, is executable
+        command_file = args.command_file
+        if not os.path.exists(command_file):
+            print(f"{command_file} does not exist")
+            exit(1)
+        if not os.access(command_file, os.X_OK):
+            print(f"{command_file} is not an executable")
+            exit(1)
+
         executable = [args.command_file]
         patterns_watched.append(args.command_file)
 
@@ -66,14 +75,13 @@ def main():
 
     combine_stderr = True if args.combine_stderr == "true" else False
 
-
     if len(patterns_watched) == 0:
         print("auto-runner not watching any files, exiting")
         exit(1)
 
     command = Command(command=executable)
     file_watcher = FileWatcher(patterns=patterns_watched)
-    logger = Logger(file_name=args.file_name,
+    logger = Logger(file_name=args.log_file,
                     max_backups=args.max_backups,
                     combine_stderr=combine_stderr)
     runner = Runner(command=command,

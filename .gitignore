@@ -1,1 +1,6 @@
-__pycache__/*
+# Created by venv; see https://docs.python.org/3/library/venv.html
+__pycache__/
+bin/
+lib/
+pyvenv.cfg
+src/auto_runner.egg-info/
