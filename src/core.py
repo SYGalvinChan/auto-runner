@@ -52,7 +52,7 @@ class FileWatcher:
         curr_files_state = {}
 
         for pattern in patterns:
-            paths = glob.glob(pattern)
+            paths = glob.glob(pattern, recursive=True)
             for path in paths:
                 try:
                     modified_time = os.path.getmtime(path)

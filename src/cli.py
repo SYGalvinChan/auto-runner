@@ -5,13 +5,13 @@ import argparse
 from core import Runner, Logger, Command, FileWatcher
 
 def main():
-
     descriptor = ("auto-runner is a utility to watch a set of files for changes and run a command automatically when a change is detected.\n"
                   "\n"
                   "Example:\n"
-                  "    auto-runner -C text.sh -w src/ tests/\n"
+                  "    auto-runner -C test.sh -w 'src/**' 'tests/**'\n"
                   "\n"
-                  "auto-runner will run ./text.sh everytime a file in src/ or tests/ directory is modified")
+                  "auto-runner will run ./test.sh everytime a file in src/ or tests/ directory is modified")
+
     parser = argparse.ArgumentParser(prog="auto-runner",
                                      description=descriptor,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -28,6 +28,7 @@ def main():
                                             description="specifies the set of files that the auto-runner will watch for changes.")
     watch_group.add_argument("-w", "--watch", 
                              nargs='+', 
+                             action="extend",
                              help="files to watch for changes (space seperated)")
     watch_group.add_argument("-W", "--watch-file", 
                              help="text file containing files to watch (auto-runner will watch this file for changes)")
@@ -48,6 +49,7 @@ def main():
     args = parser.parse_args()
 
     patterns_watched = []
+
     if args.command:
         executable = shlex.split(args.command)
     else:
@@ -89,6 +91,7 @@ def main():
     runner = Runner(command=command,
                     file_watcher=file_watcher,
                     logger=logger)
+
     try:
         runner.start()
     except KeyboardInterrupt:
@@ -96,4 +99,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
