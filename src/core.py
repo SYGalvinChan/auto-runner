@@ -30,15 +30,28 @@ class Command:
 
 class FileWatcher:
     def __init__(self,
-                 patterns=[]):
+                 patterns=[],
+                 src_file=""):
         self.patterns = patterns
+        self.src_file = src_file
 
         self.prev_files_state = {}
 
+    def get_patterns_from_src(self):
+        if self.src_file == "":
+            return []
+        with open(self.src_file) as src:
+            patterns = src.read().splitlines()
+            patterns = [line for line in patterns if line]
+            return patterns
+
     def is_modified(self):
+        patterns = self.get_patterns_from_src()
+        patterns += self.patterns
+
         curr_files_state = {}
 
-        for pattern in self.patterns:
+        for pattern in patterns:
             paths = glob.glob(pattern)
             for path in paths:
                 try:
