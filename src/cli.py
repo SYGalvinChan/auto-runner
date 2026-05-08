@@ -1,101 +1,142 @@
 import os
+import sys
 import shlex
+import subprocess
 import argparse
 
-from core import Runner, Logger, Command, FileWatcher
+from core import Runner, Logger, Command, FileWatcher, GitFileWatcher, Screen
+
+
+def in_git_repo():
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            capture_output=True,
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
 
 def main():
-    descriptor = ("auto-runner is a utility to watch a set of files for changes and run a command automatically when a change is detected.\n"
-                  "\n"
-                  "Example:\n"
-                  "    auto-runner -C test.sh -w 'src/**' 'tests/**'\n"
-                  "\n"
-                  "auto-runner will run ./test.sh everytime a file in src/ or tests/ directory is modified")
+    descriptor = (
+        "auto-runner watches files for changes and re-runs a command automatically.\n"
+        "\n"
+        "By default, when run inside a git repository, auto-runner watches all\n"
+        "git-tracked files and displays output on an alternate terminal screen.\n"
+        "\n"
+        "Examples:\n"
+        "    auto-runner -C test.sh\n"
+        "    auto-runner -c 'pytest tests/' -w 'src/**' 'tests/**'\n"
+        "    auto-runner -c 'make build' --no-screen -o build.log"
+    )
 
-    parser = argparse.ArgumentParser(prog="auto-runner",
-                                     description=descriptor,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        prog="auto-runner",
+        description=descriptor,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
-    command_group = parser.add_argument_group(title="Command", 
-                                              description="specifies command/file the auto-runner will execute whenever it detects a file is modified")
+    command_group = parser.add_argument_group(
+        title="Command",
+        description="command to run when a watched file changes",
+    )
     command_group = command_group.add_mutually_exclusive_group(required=True)
-    command_group.add_argument("-c", "--command", 
-                               help="command to run automatically")
-    command_group.add_argument("-C", "--command-file", 
-                               help="executable file to run automatically (auto-runner will watch this file for changes)")
+    command_group.add_argument("-c", "--command",
+                               help="shell command to run")
+    command_group.add_argument("-C", "--command-file",
+                               help="executable file to run (also watched for changes in non-git mode)")
 
-    watch_group = parser.add_argument_group(title="Watch", 
-                                            description="specifies the set of files that the auto-runner will watch for changes.")
-    watch_group.add_argument("-w", "--watch", 
-                             nargs='+', 
-                             action="extend",
-                             help="files to watch for changes (space seperated)")
-    watch_group.add_argument("-W", "--watch-file", 
-                             help="text file containing files to watch (auto-runner will watch this file for changes)")
+    watch_group = parser.add_argument_group(
+        title="Watch",
+        description="files to watch (defaults to all git-tracked files when inside a git repo)",
+    )
+    watch_group.add_argument("-w", "--watch",
+                             nargs="+", action="extend",
+                             help="glob patterns to watch (disables git mode)")
+    watch_group.add_argument("-W", "--watch-file",
+                             help="text file containing glob patterns to watch (disables git mode)")
+    watch_group.add_argument("--no-git",
+                             action="store_true",
+                             help="disable git-aware watching; requires -w or -W")
 
-    logging_group = parser.add_argument_group(title="Logging", 
-                                              description="specifies logging behavior")
-    logging_group.add_argument("--separate-stderr", 
+    display_group = parser.add_argument_group(title="Display")
+    display_group.add_argument("--no-screen",
                                action="store_true",
-                               help="if present, auto-runner will redirect stdout and stderr of the command to separate files")
-    logging_group.add_argument("-o", "--output", 
-                               default="auto-runner.log", 
-                               help="auto-runner will log the outputs of command to this file")
-    logging_group.add_argument("--max-backups", 
-                               default=10, 
-                               type=int,
-                               help="auto-runner will keep MAX_BACKUPS number of old logs and delete older logs")
+                               help="disable alternate screen; output goes to stdout/log file")
+
+    logging_group = parser.add_argument_group(
+        title="Logging",
+        description="only applies when --no-screen is set",
+    )
+    logging_group.add_argument("--separate-stderr",
+                               action="store_true",
+                               help="log stdout and stderr to separate files")
+    logging_group.add_argument("-o", "--output",
+                               default="auto-runner.log",
+                               help="log file name (default: auto-runner.log)")
+    logging_group.add_argument("--max-backups",
+                               default=10, type=int,
+                               help="number of old log files to keep (default: 10)")
 
     args = parser.parse_args()
 
-    patterns_watched = []
-
+    # Build executable
     if args.command:
         executable = shlex.split(args.command)
     else:
         command_file = args.command_file
         if not os.path.exists(command_file):
-            print(f"{command_file} does not exist")
+            print(f"error: {command_file} does not exist")
             exit(1)
         if not os.access(command_file, os.X_OK):
-            print(f"{command_file} is not an executable")
+            print(f"error: {command_file} is not executable")
             exit(1)
+        executable = [os.path.abspath(command_file)]
 
-        executable = [os.path.abspath(args.command_file)]
-        patterns_watched.append(args.command_file)
+    # Decide file watcher
+    explicit_patterns = bool(args.watch or args.watch_file)
+    use_git = not args.no_git and not explicit_patterns and in_git_repo()
 
-    if args.watch:
-        patterns_watched += args.watch
-
-    if args.watch_file:
-        if not os.path.exists(args.watch_file):
-            print(f"{args.watch_file} does not exist")
-            exit(1)
-        patterns_watched.append(args.watch_file)
-        watch_file = args.watch_file
+    if use_git:
+        file_watcher = GitFileWatcher()
     else:
-        watch_file = ""
+        patterns = list(args.watch or [])
+        # in non-git mode, also watch the command file itself
+        if args.command_file:
+            patterns.insert(0, args.command_file)
+        if not patterns and not args.watch_file:
+            print("error: not watching any files — use -w, -W, or run inside a git repo")
+            exit(1)
+        file_watcher = FileWatcher(
+            patterns=patterns,
+            src_file=args.watch_file or "",
+        )
 
-    if len(patterns_watched) == 0 and args.watch_file is None:
-        print("auto-runner not watching any files, exiting")
-        exit(1)
-
-    combine_stderr = not args.separate_stderr
+    # Decide screen vs log
+    use_screen = sys.stdout.isatty() and not args.no_screen
+    screen = Screen() if use_screen else None
+    logger = None
+    if not use_screen:
+        logger = Logger(
+            file_name=args.output,
+            max_backups=args.max_backups,
+            combine_stderr=not args.separate_stderr,
+        )
 
     command = Command(command=executable)
-    file_watcher = FileWatcher(patterns=patterns_watched,
-                               src_file=watch_file)
-    logger = Logger(file_name=args.output,
-                    max_backups=args.max_backups,
-                    combine_stderr=combine_stderr)
-    runner = Runner(command=command,
-                    file_watcher=file_watcher,
-                    logger=logger)
+    runner  = Runner(
+        command=command,
+        file_watcher=file_watcher,
+        logger=logger,
+        screen=screen,
+    )
 
     try:
         runner.start()
     except KeyboardInterrupt:
-        runner.stop()
+        pass
+
 
 if __name__ == "__main__":
     main()
