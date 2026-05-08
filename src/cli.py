@@ -7,7 +7,7 @@ import argparse
 from core import Runner, Command, FileWatcher, GitFileWatcher, Screen
 
 
-def in_git_repo():
+def in_git_repo() -> bool:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--git-dir"],
@@ -18,7 +18,7 @@ def in_git_repo():
         return False
 
 
-def main():
+def main() -> None:
     descriptor = (
         "auto-runner watches files for changes and re-runs a command automatically.\n"
         "\n"
