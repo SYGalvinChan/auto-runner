@@ -55,7 +55,7 @@ def main() -> None:
                              nargs="+", action="extend",
                              help="glob patterns to watch (disables git mode)")
     watch_group.add_argument("-W", "--watch-file",
-                             help="text file containing glob patterns to watch (disables git mode)")
+                             help="text file containing glob patterns to watch; the file itself is also watched (disables git mode)")
     watch_group.add_argument("--no-git",
                              action="store_true",
                              help="disable git-aware watching; requires -w or -W")
@@ -88,9 +88,11 @@ def main() -> None:
         file_watcher = GitFileWatcher()
     else:
         patterns = list(args.watch or [])
-        # in non-git mode, also watch the command file itself
+        # in non-git mode, also watch the command file and watch-file itself
         if args.command_file:
             patterns.insert(0, args.command_file)
+        if args.watch_file:
+            patterns.insert(0, args.watch_file)
         if not patterns and not args.watch_file:
             print("error: not watching any files — use -w, -W, or run inside a git repo")
             exit(1)

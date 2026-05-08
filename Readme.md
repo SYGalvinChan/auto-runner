@@ -49,7 +49,7 @@ auto-runner -c 'make build' --no-screen
 | Flag | Description |
 |------|-------------|
 | `-w`, `--watch` | Glob patterns to watch — disables git mode |
-| `-W`, `--watch-file` | Text file containing glob patterns (one per line) — disables git mode |
+| `-W`, `--watch-file` | Text file containing glob patterns (one per line); the file itself is also watched — disables git mode |
 | `--no-git` | Disable git-aware watching; requires `-w` or `-W` |
 
 ### Display
