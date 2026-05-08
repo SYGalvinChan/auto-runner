@@ -1,10 +1,12 @@
 import os
 import sys
+import signal
 import subprocess
 import time
 import glob
 import shlex
 from datetime import datetime
+from types import FrameType
 
 _E = "\033["
 ENTER_ALT   = _E + "?1049h"
@@ -201,18 +203,38 @@ class Runner:
         self.screen       = screen
         self.interval     = interval
         self._stopped     = False
+        self._needs_redraw = False
+        self._last_header: tuple[str, int, str, list[str] | None] | None = None
+        self._last_footer: tuple[int, float] | None = None
 
     def start(self) -> None:
         if self.screen:
             self.screen.enter()
+            signal.signal(signal.SIGWINCH, self._on_resize)
         try:
             while not self._stopped:
+                if self._needs_redraw:
+                    self._needs_redraw = False
+                    self._redraw()
                 if self.file_watcher.is_modified():
                     self._run_once()
                 time.sleep(self.interval)
         finally:
             if self.screen:
+                signal.signal(signal.SIGWINCH, signal.SIG_DFL)
                 self.screen.exit()
+
+    def _on_resize(self, signum: int, frame: FrameType | None) -> None:
+        self._needs_redraw = True
+
+    def _redraw(self) -> None:
+        if not self.screen or not self._last_header:
+            return
+        cmd_str, count, label, changed = self._last_header
+        self.screen.render_header(cmd_str, count, label, changed)
+        if self._last_footer:
+            exit_code, duration = self._last_footer
+            self.screen.render_footer(exit_code, duration)
 
     def _run_once(self) -> None:
         count   = self.file_watcher.file_count()
@@ -221,6 +243,7 @@ class Runner:
 
         if self.screen:
             self.screen.render_header(str(self.command), count, label, changed)
+            self._last_header = (str(self.command), count, label, changed)
 
         start     = time.time()
         exit_code = self.command.run()
@@ -228,6 +251,7 @@ class Runner:
 
         if self.screen:
             self.screen.render_footer(exit_code or 0, duration)
+            self._last_footer = (exit_code or 0, duration)
 
     def stop(self) -> None:
         self._stopped = True

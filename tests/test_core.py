@@ -1,4 +1,5 @@
 import os
+import signal
 import time
 import pytest
 from unittest.mock import Mock, patch
@@ -289,3 +290,104 @@ class TestRunner:
         runner = Runner()
         runner.stop()
         assert runner._stopped is True
+
+
+# ── Runner resize ─────────────────────────────────────────────────────────────
+
+class TestRunnerResize:
+    def test_on_resize_sets_needs_redraw(self):
+        runner = Runner()
+        runner._on_resize(signal.SIGWINCH, None)
+        assert runner._needs_redraw is True
+
+    def test_redraw_renders_last_header_and_footer(self):
+        screen = Mock()
+        runner = Runner(screen=screen)
+        runner._last_header = ("pytest", 5, "git-tracked", ["a.py"])
+        runner._last_footer = (0, 1.5)
+        runner._redraw()
+        screen.render_header.assert_called_once_with("pytest", 5, "git-tracked", ["a.py"])
+        screen.render_footer.assert_called_once_with(0, 1.5)
+
+    def test_redraw_is_noop_before_first_run(self):
+        screen = Mock()
+        runner = Runner(screen=screen)
+        runner._redraw()
+        screen.render_header.assert_not_called()
+        screen.render_footer.assert_not_called()
+
+    def test_redraw_is_noop_without_screen(self):
+        runner = Runner(screen=None)
+        runner._last_header = ("pytest", 5, "git-tracked", [])
+        runner._redraw()  # must not raise
+
+    def test_redraw_omits_footer_before_first_run_completes(self):
+        screen = Mock()
+        runner = Runner(screen=screen)
+        runner._last_header = ("pytest", 5, "git-tracked", [])
+        runner._redraw()
+        screen.render_header.assert_called_once()
+        screen.render_footer.assert_not_called()
+
+    def test_run_once_stores_header_and_footer_state(self):
+        cmd = Command(["pytest"])
+        cmd.run = Mock(return_value=0)
+        screen = Mock()
+        w = Mock(file_count=Mock(return_value=3), source_label=Mock(return_value="git-tracked"), last_changed=["a.py"])
+        runner = Runner(command=cmd, file_watcher=w, screen=screen)
+        runner._run_once()
+        assert runner._last_header == ("pytest", 3, "git-tracked", ["a.py"])
+        assert runner._last_footer is not None
+        assert runner._last_footer[0] == 0
+
+    def test_sigwinch_registered_on_start_and_restored_on_exit(self):
+        screen = Mock()
+        runner_ref = [None]
+        cmd = Command(["true"])
+        cmd.run = Mock(return_value=0)
+        w = self._stopping_watcher(runner_ref)
+        runner = Runner(command=cmd, file_watcher=w, screen=screen)
+        runner_ref[0] = runner
+        with patch("time.sleep"):
+            runner.start()
+        assert signal.getsignal(signal.SIGWINCH) is signal.SIG_DFL
+
+    def test_resize_triggers_redraw_on_next_tick(self):
+        screen = Mock()
+        runner_ref = [None]
+        cmd = Command(["true"])
+        cmd.run = Mock(return_value=0)
+
+        call_count = 0
+        def is_modified():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                runner_ref[0]._needs_redraw = True
+                return False
+            runner_ref[0].stop()
+            return False
+
+        w = Mock()
+        w.is_modified.side_effect = is_modified
+        w.file_count.return_value = 5
+        w.source_label.return_value = "git-tracked"
+        w.last_changed = []
+
+        runner = Runner(command=cmd, file_watcher=w, screen=screen)
+        runner._last_header = ("true", 5, "git-tracked", [])
+        runner_ref[0] = runner
+        with patch("time.sleep"):
+            runner.start()
+        screen.render_header.assert_called()
+
+    def _stopping_watcher(self, runner_ref: list) -> Mock:
+        def is_modified():
+            runner_ref[0].stop()
+            return False
+        w = Mock()
+        w.is_modified.side_effect = is_modified
+        w.file_count.return_value = 0
+        w.source_label.return_value = "git-tracked"
+        w.last_changed = []
+        return w
