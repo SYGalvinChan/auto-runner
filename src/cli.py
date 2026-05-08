@@ -65,6 +65,10 @@ def main() -> None:
                                action="store_true",
                                help="disable alternate screen; output goes to stdout")
 
+    parser.add_argument("--timeout",
+                        type=float, default=None, metavar="SECONDS",
+                        help="kill the command after this many seconds")
+
     args = parser.parse_args()
 
     # Build executable
@@ -104,7 +108,7 @@ def main() -> None:
     use_screen = sys.stdout.isatty() and not args.no_screen
     screen     = Screen() if use_screen else None
 
-    command = Command(command=executable)
+    command = Command(command=executable, timeout=args.timeout)
     runner  = Runner(
         command=command,
         file_watcher=file_watcher,

@@ -58,6 +58,12 @@ auto-runner -c 'make build' --no-screen
 |------|-------------|
 | `--no-screen` | Disable alternate screen; output goes to stdout |
 
+### Other
+
+| Flag | Description |
+|------|-------------|
+| `--timeout SECONDS` | Kill the command after this many seconds |
+
 ## How it works
 
 - **Git mode** (default inside a git repo): watches all files tracked by `git ls-files`. The header shows how many files are tracked and which ones changed on the last run.
