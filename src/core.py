@@ -139,48 +139,6 @@ class FileWatcher:
         return "watched"
 
 
-class Logger:
-    def __init__(self, file_name="auto-runner.log", max_backups=10, combine_stderr=True):
-        self.file_name = file_name
-        self.max_backups = max_backups
-        self.combine_stderr = combine_stderr
-        self._stdout = None
-        self._stderr = None
-
-    def rotate(self):
-        self._close()
-        exts = ["combined", "stdout", "stderr"]
-        for i in range(self.max_backups - 1, 0, -1):
-            for e in exts:
-                src  = f"{self.file_name}.{e}.{i}"
-                dest = f"{self.file_name}.{e}.{i+1}"
-                if os.path.exists(dest): os.remove(dest)
-                if os.path.exists(src):  os.rename(src, dest)
-        for e in exts:
-            src  = f"{self.file_name}.{e}"
-            dest = f"{self.file_name}.{e}.1"
-            if os.path.exists(src):
-                if os.path.exists(dest): os.remove(dest)
-                os.rename(src, dest)
-        if self.combine_stderr:
-            combined = open(self.file_name + ".combined", "w")
-            self._stdout = combined
-            self._stderr = combined
-        else:
-            self._stdout = open(self.file_name + ".stdout", "w")
-            self._stderr = open(self.file_name + ".stderr", "w")
-
-    def get_stdout(self): return self._stdout
-    def get_stderr(self): return self._stderr
-
-    def stop(self): self._close()
-
-    def _close(self):
-        if self._stdout: self._stdout.close()
-        if self._stderr and self._stderr is not self._stdout: self._stderr.close()
-        self._stdout = None
-        self._stderr = None
-
 
 class Screen:
     def enter(self):
@@ -232,12 +190,10 @@ class Runner:
     def __init__(self,
                  command=None,
                  file_watcher=None,
-                 logger=None,
                  screen=None,
                  interval=1):
         self.command      = command or Command()
         self.file_watcher = file_watcher or FileWatcher()
-        self.logger       = logger
         self.screen       = screen
         self.interval     = interval
         self._stopped     = False
@@ -253,26 +209,17 @@ class Runner:
         finally:
             if self.screen:
                 self.screen.exit()
-            if self.logger:
-                self.logger.stop()
 
     def _run_once(self):
-        count = self.file_watcher.file_count()
-        label = self.file_watcher.source_label()
+        count   = self.file_watcher.file_count()
+        label   = self.file_watcher.source_label()
+        changed = getattr(self.file_watcher, "last_changed", None)
 
         if self.screen:
-            changed = getattr(self.file_watcher, "last_changed", None)
             self.screen.render_header(str(self.command), count, label, changed)
-            stdout, stderr = None, None
-        elif self.logger:
-            self.logger.rotate()
-            stdout = self.logger.get_stdout()
-            stderr = self.logger.get_stderr()
-        else:
-            stdout, stderr = None, None
 
         start     = time.time()
-        exit_code = self.command.run(stdout=stdout, stderr=stderr)
+        exit_code = self.command.run()
         duration  = time.time() - start
 
         if self.screen:

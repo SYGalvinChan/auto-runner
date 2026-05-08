@@ -4,7 +4,7 @@ import shlex
 import subprocess
 import argparse
 
-from core import Runner, Logger, Command, FileWatcher, GitFileWatcher, Screen
+from core import Runner, Command, FileWatcher, GitFileWatcher, Screen
 
 
 def in_git_repo():
@@ -63,21 +63,7 @@ def main():
     display_group = parser.add_argument_group(title="Display")
     display_group.add_argument("--no-screen",
                                action="store_true",
-                               help="disable alternate screen; output goes to stdout/log file")
-
-    logging_group = parser.add_argument_group(
-        title="Logging",
-        description="only applies when --no-screen is set",
-    )
-    logging_group.add_argument("--separate-stderr",
-                               action="store_true",
-                               help="log stdout and stderr to separate files")
-    logging_group.add_argument("-o", "--output",
-                               default="auto-runner.log",
-                               help="log file name (default: auto-runner.log)")
-    logging_group.add_argument("--max-backups",
-                               default=10, type=int,
-                               help="number of old log files to keep (default: 10)")
+                               help="disable alternate screen; output goes to stdout")
 
     args = parser.parse_args()
 
@@ -113,22 +99,13 @@ def main():
             src_file=args.watch_file or "",
         )
 
-    # Decide screen vs log
     use_screen = sys.stdout.isatty() and not args.no_screen
-    screen = Screen() if use_screen else None
-    logger = None
-    if not use_screen:
-        logger = Logger(
-            file_name=args.output,
-            max_backups=args.max_backups,
-            combine_stderr=not args.separate_stderr,
-        )
+    screen     = Screen() if use_screen else None
 
     command = Command(command=executable)
     runner  = Runner(
         command=command,
         file_watcher=file_watcher,
-        logger=logger,
         screen=screen,
     )
 

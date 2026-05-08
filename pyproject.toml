@@ -2,8 +2,15 @@
 name = "auto-runner"
 version = "0.0.1"
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [project.scripts]
 auto-runner = "cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
