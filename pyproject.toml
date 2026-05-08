@@ -5,8 +5,9 @@ version = "0.0.1"
 [project.optional-dependencies]
 dev = ["pytest"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["cli", "core"]
 
 [project.scripts]
 auto-runner = "cli:main"
