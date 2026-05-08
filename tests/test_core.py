@@ -190,7 +190,7 @@ class TestGitFileWatcher:
 # ── Runner ────────────────────────────────────────────────────────────────────
 
 class TestRunner:
-    def _one_shot_watcher(self, runner_ref, fires=True):
+    def _one_shot_watcher(self, runner_ref: list[Runner | None], fires: bool = True) -> Mock:
         """Watcher that triggers once then stops the runner."""
         call_count = 0
 
@@ -244,7 +244,7 @@ class TestRunner:
 
     def test_start_enters_and_exits_screen(self):
         screen = Mock()
-        runner_ref = [None]
+        runner_ref: list[Runner | None] = [None]
         cmd = Command(["true"])
         cmd.run = Mock(return_value=0)
         w = self._one_shot_watcher(runner_ref)
@@ -265,7 +265,7 @@ class TestRunner:
         screen.exit.assert_called_once()
 
     def test_start_runs_command_when_modified(self):
-        runner_ref = [None]
+        runner_ref: list[Runner | None] = [None]
         cmd = Command(["true"])
         cmd.run = Mock(return_value=0)
         w = self._one_shot_watcher(runner_ref, fires=True)
@@ -276,7 +276,7 @@ class TestRunner:
         cmd.run.assert_called_once()
 
     def test_start_skips_command_when_not_modified(self):
-        runner_ref = [None]
+        runner_ref: list[Runner | None] = [None]
         cmd = Command(["true"])
         cmd.run = Mock(return_value=0)
         w = self._one_shot_watcher(runner_ref, fires=False)
@@ -342,7 +342,7 @@ class TestRunnerResize:
 
     def test_sigwinch_registered_on_start_and_restored_on_exit(self):
         screen = Mock()
-        runner_ref = [None]
+        runner_ref: list[Runner | None] = [None]
         cmd = Command(["true"])
         cmd.run = Mock(return_value=0)
         w = self._stopping_watcher(runner_ref)
@@ -354,7 +354,7 @@ class TestRunnerResize:
 
     def test_resize_triggers_redraw_on_next_tick(self):
         screen = Mock()
-        runner_ref = [None]
+        runner_ref: list[Runner | None] = [None]
         cmd = Command(["true"])
         cmd.run = Mock(return_value=0)
 
@@ -381,7 +381,7 @@ class TestRunnerResize:
             runner.start()
         screen.render_header.assert_called()
 
-    def _stopping_watcher(self, runner_ref: list) -> Mock:
+    def _stopping_watcher(self, runner_ref: list[Runner | None]) -> Mock:
         def is_modified():
             runner_ref[0].stop()
             return False
